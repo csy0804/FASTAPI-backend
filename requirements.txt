@@ -141,8 +141,8 @@ stevedore==5.1.0
 sympy==1.13.3
 threadpoolctl==3.2.0
 tomlkit==0.13.2
-torch==2.2.1
-torchvision==0.17.2
+torch>=2.2.1
+torchvision>=0.17.2
 tqdm==4.67.1
 trove-classifiers==2025.3.19.19
 typing_extensions==4.12.2
