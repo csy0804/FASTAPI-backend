@@ -1,19 +1,27 @@
 from typing import Any, List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from ...core.security import get_password_hash
 from ...services.auth import get_current_active_user
-from ...schemas.user import User, UserCreate, UserUpdate
+from ...schemas.user import User, UserUpdate
 from ...models.user import User as UserModel, UserRole
-from ...core.database import get_db
+from ...core.database import get_db, get_mongodb
+from ...services.database_service import DatabaseService
+
+# 依赖注入函数，提供 DatabaseService 实例
+async def get_database_service(
+    postgres_db: Session = Depends(get_db),
+    mongodb_db: AsyncIOMotorDatabase = Depends(get_mongodb),
+) -> DatabaseService:
+    return DatabaseService(postgres_db, mongodb_db)
 
 router = APIRouter()
 
 # 获取用户列表（仅管理员）
 @router.get("/", response_model=List[User])
-def read_users(
-    db: Session = Depends(get_db),
+async def read_users(
+    db_service: DatabaseService = Depends(get_database_service),
     skip: int = 0,
     limit: int = 100,
     current_user: UserModel = Depends(get_current_active_user),
@@ -23,17 +31,17 @@ def read_users(
             status_code=403,
             detail="权限不足"
         )
-    users = db.query(UserModel).offset(skip).limit(limit).all()
+    users = await db_service.get_all_users(skip=skip, limit=limit)
     return users
 
 # 获取指定用户信息
 @router.get("/{user_id}", response_model=User)
-def read_user(
+async def read_user(
     user_id: int,
-    db: Session = Depends(get_db),
+    db_service: DatabaseService = Depends(get_database_service),
     current_user: UserModel = Depends(get_current_active_user),
 ) -> Any:
-    user = db.query(UserModel).filter(UserModel.id == user_id).first()
+    user = await db_service.get_user(user_id)
     if user is None:
         raise HTTPException(
             status_code=404,
@@ -49,36 +57,33 @@ def read_user(
 
 # 更新用户信息（仅管理员或本人）
 @router.put("/{user_id}", response_model=User)
-def update_user(
+async def update_user(
     user_id: int,
     user_in: UserUpdate,
-    db: Session = Depends(get_db),
+    db_service: DatabaseService = Depends(get_database_service),
     current_user: UserModel = Depends(get_current_active_user),
 ) -> Any:
-    user = db.query(UserModel).filter(UserModel.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="用户不存在")
     if current_user.role != UserRole.ADMIN and current_user.id != user_id:
         raise HTTPException(status_code=403, detail="权限不足")
-    # 这里假设 user_in 是 Pydantic 模型
-    for field, value in user_in.dict(exclude_unset=True).items():
-        setattr(user, field, value)
-    db.commit()
-    db.refresh(user)
+
+    user = await db_service.update_user(user_id, user_in)
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
     return user
 
 # 删除用户（仅管理员）
 @router.delete("/{user_id}", response_model=User)
-def delete_user(
+async def delete_user(
     user_id: int,
-    db: Session = Depends(get_db),
+    db_service: DatabaseService = Depends(get_database_service),
     current_user: UserModel = Depends(get_current_active_user),
 ) -> Any:
-    user = db.query(UserModel).filter(UserModel.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="用户不存在")
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="权限不足")
-    db.delete(user)
-    db.commit()
-    return user
+
+    success = await db_service.delete_user(user_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    return status.HTTP_204_NO_CONTENT

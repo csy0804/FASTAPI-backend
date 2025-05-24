@@ -7,7 +7,7 @@ from fastapi_classification.core.database import Base
 from fastapi_classification.models.case import Case
 from fastapi_classification.models.user import User
 from fastapi_classification.models.image import Image
-from fastapi_classification.models.Diagnosis import Diagnosis
+from fastapi_classification.models.diagnosis import Diagnosis
 from alembic import context
 
 # this is the Alembic Config object, which provides

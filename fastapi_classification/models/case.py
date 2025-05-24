@@ -1,7 +1,14 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Enum
 from sqlalchemy.orm import relationship
-from datetime import datetime,timezone
+from datetime import datetime, timezone
 from ..core.database import Base
+import enum
+
+class CaseStatus(str, enum.Enum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    ARCHIVED = "archived"
 
 class Case(Base):
     __tablename__ = "cases"
@@ -12,6 +19,11 @@ class Case(Base):
     age = Column(Integer)
     gender = Column(String)
     created_by = Column(Integer, ForeignKey("users.id"))
+    
+    # 状态管理
+    status = Column(Enum(CaseStatus), default=CaseStatus.PENDING, comment="病例状态")
+    
+    # 时间戳
     created_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -24,7 +36,8 @@ class Case(Base):
         nullable=False
     )
 
+    # 关联关系
     creator = relationship("User", back_populates="cases")
-    # 如果你还没有Image和Diagnosis模型，可以先注释掉下面两行
-    images = relationship("Image", back_populates="case", cascade="all, delete-orphan")
     diagnoses = relationship("Diagnosis", back_populates="case", cascade="all, delete-orphan")
+    images = relationship("Image", back_populates="case", cascade="all, delete-orphan")
+    doctor_notes = relationship("DoctorNote", back_populates="case", cascade="all, delete-orphan")
